@@ -11,6 +11,7 @@ import sqlite3
 from tqdm import tqdm
 import z3
 from prettytable import PrettyTable
+import pickle
 
 
 '''
@@ -50,6 +51,7 @@ class classTable:
     semester = ''
     # courses code list you want to schedule
     course_code_list = []
+    __prefer_class_list = []
 
     def __init__(self, usrname, pwd) -> None:
         '''
@@ -68,11 +70,20 @@ class classTable:
 
     def clear(self):
         '''
-        clear all history_model
+        clear all history_model, __prefer_class_list
         each time you call solve(), the class table solved will be saved to history_model
         '''
         self.__history_model = []
-        Alarm.success("History model cleared")
+        self.__prefer_class_list = []
+        Alarm.success("History model and Prefer class cleared")
+    
+    def save_history_model(self):
+        with open('history.plk', 'wb') as f:
+            pickle.dump(self.__history_model, f, pickle.HIGHEST_PROTOCOL)
+    
+    def load_history_model(self):
+        with open('history.plk', 'rb') as f:
+            self.__history_model = pickle.load(f)
 
     def config(self):
         '''
@@ -311,7 +322,7 @@ class classTable:
                 result = cur.execute("SELECT scheduleWeek, scheduleTime, courseName, classCode FROM courses WHERE courseCode = '%s' AND semester = '%s'" % (courseCode, self.semester)).fetchall()
                 course_list[courseCode] = result
             except sqlite3.OperationalError as e:
-                Alarm.error("Error with course code: %s" % (courseCode))
+                Alarm.fail("Error with course code: %s" % (courseCode))
                 continue
         con.close()
         Alarm.success("Schedule extracted")
@@ -410,9 +421,26 @@ class classTable:
         # same lesson only choose one class
         lesson_constraint = z3.And(lesson_constraint_list)
         Alarm.info("Course constraint added")
+
+        prefer_constraint_list = []
+        not_prefer_constraint_list = []
+        for classTuple in self.__prefer_class_list:
+            for prefer in classTuple[0]:
+                for num in ClassVar:
+                    if prefer == str(ClassVar[num]).split('_')[0]:
+                        prefer_constraint_list.append(ClassVar[num])
+            for not_prefer in classTuple[1]:
+                for num in ClassVar:
+                    if not_prefer == str(ClassVar[num]).split('_')[0]:
+                        not_prefer_constraint_list.append(ClassVar[num])
+        if len(self.__prefer_class_list) != 0:
+            prefer_constraint = z3.And(z3.Or(prefer_constraint_list), z3.Not(z3.Or(not_prefer_constraint_list)))
+        else:
+            prefer_constraint = z3.And()
+        Alarm.info("Prefer constraint added")
         Alarm.success("Constraint added")
 
-        return z3.And(place_constraint, lesson_constraint, history_constraint)
+        return z3.And(place_constraint, lesson_constraint, history_constraint, prefer_constraint)
 
     def _place_lessons(self, cur_classes: list):
         Alarm.info("Try to place lessons...")
@@ -423,7 +451,7 @@ class classTable:
             try:
                 result = cur.execute("SELECT scheduleWeek, scheduleTime, courseName, classCode, courseName, teacher FROM courses WHERE classCode = '%s' AND semester = '%s'" % (class_id, self.semester)).fetchall()[0]
             except sqlite3.OperationalError as e:
-                Alarm.error("Error with class code: %s" % (class_id))
+                Alarm.fail("Error with class code: %s" % (class_id))
                 continue
 
             schedule_list , _, _ = self._extract_schedule(result)
@@ -471,11 +499,123 @@ class classTable:
         >>> myTable.print_class_table(0)    # print class table at week 1
         '''
         if self.__place_table == []:
-            Alarm.warning("No place table, try to create one")
-            self._place_lessons()
+            Alarm.warning("No place table, try to solve")
+            self.solve()
         if week < 0 or week > 17:
             Alarm.fail("Invalid week")
             return
         table = PrettyTable(['Mon.','Tue.','Wed.','Thu.','Fri.','Sat.','Sun.'])
         table.add_rows([['\n'.join(self.__place_table[week][i][j])  if self.__place_table[week][i][j] != [] else '' for i in range(7)] for j in range(13)])
+        print(table)
+
+    def get_study_plan(self):
+        self._check_login()
+        if self.__session is None:
+            Alarm.fail("Please use login() first!")
+            return
+        Alarm.info("Trying to get your plan...")
+        r = self.__session.get("https://jw.ustc.edu.cn/for-std/program")
+        soup = BeautifulSoup(r.text, "html.parser")
+        plan = soup.find("a")
+        Alarm.info("Your plan is: " + plan.text.strip("\n\t"))
+        planurl = "https://jw.ustc.edu.cn/for-std/program/root-module-json/" + plan["href"].split('/')[-1]
+        r = self.__session.get(planurl)
+        lessons = json.loads(r.text)
+
+        lessons['allPlanCourses'][0]
+        lesson_list = {}
+        for item in lessons['allPlanCourses']:
+            if item['termTextZhs'][0] not in lesson_list:
+                lesson_list[item['termTextZhs'][0]] = [(item['course']['nameZh'], item['course']['code'])]
+            else:
+                lesson_list[item['termTextZhs'][0]].append((item['course']['nameZh'], item['course']['code']))
+
+        for k, v in lesson_list.items():
+            print("--------------" + k + "--------------")
+            for i in v:
+                print(i[0] + " " + i[1])
+    
+    def _select_prefer_class(self):
+        con = sqlite3.connect('course.db')
+        cur = con.cursor()
+        for courseCode in self.course_code_list:
+            try:
+                result = cur.execute("SELECT teacher, scheduleWeek, scheduleTime, courseName, classCode FROM courses WHERE courseCode = '%s' AND semester = '%s'" % (courseCode, self.semester)).fetchall()
+                if len(result) == 0:
+                    Alarm.fail("No such course: %s" % (courseCode))
+                    return
+                print("select your prefer class (seperate each class by ',' and skip select by press ENTER")
+                print("--------------" + result[0][3] + "--------------")
+                classes = []
+                for item in result:
+                    classes.append(item[4])
+                    print("%s\t%s\t%s\t%s\t" % (item[0], item[1], item[2], item[4]))
+                selects = input().split(',')
+                if selects != ['']:
+                    select_list = []
+                    try:
+                        for item in selects:
+                            print(item.strip())
+                            select_list.append(item.strip())
+                            classes.remove(item.strip())
+                        self.__prefer_class_list.append((select_list, classes))
+                    except Exception as e:
+                        Alarm.fail("Invalid input")
+            except sqlite3.OperationalError as e:
+                Alarm.fail("Error with course code: %s" % (courseCode))
+        con.close()
+
+if __name__ == "__main__":
+    '''
+    interactive mode
+    '''
+    print("Welcome to use class table generator!")
+    print("Please use function sequentially!")
+    table = PrettyTable(['Func Num', 'Func Name', 'Description'])
+    # table.add_row(['0', 'help', 'print this table'])
+    table.add_row(['1', 'login', 'login to your account'])
+    table.add_row(['2', 'set semester', 'select your semester'])
+    table.add_row(['3', 'set lessons', 'select your current semester lessons'])
+    table.add_row(['4', 'update database', 'update course database from jw.ustc.edu.cn'])
+    table.add_row(['5', 'add prefer class', 'select the class that you prefer'])
+    table.add_row(['6', 'solve', 'get your class table solution'])
+    table.add_row(['7', 'print class table', 'print your class table at a specific week'])
+    table.add_row(['other', 'exit', 'exit the program'])
+    print(table)
+    while True:
+        num = int(input())
+        # if num == 0:
+        #     print(table)
+        if num == 1:
+            print("Please input your username")
+            username = input()
+            print("Please input your password")
+            password = input()
+            myTable = classTable(username, password)
+            myTable.login()
+        elif num == 2:
+            myTable.print_semester_id_map()
+            print("Please input your semester id")
+            semester_id = input()
+            myTable.semester = semester_id.strip()
+        elif num == 3:
+            print("Here's your lessons, please input lessons you want to take, you only need to input lesson code(seperate each lesson by ',', e.g. \nCS1502.01, 011103.02, MARX1004.20 ")
+            myTable.get_study_plan()
+            lessons = input()
+            myTable.course_code_list = []
+            for item in lessons.split(','):
+                myTable.course_code_list.append(item.strip())
+        elif num == 4:
+            print("Updating database, if it's the first time, please wait for a while, 'course.db' will be created")
+            myTable.update_db(myTable.semester)
+        elif num == 5:
+            myTable._select_prefer_class()
+        elif num == 6:
+            myTable.solve()
+        elif num == 7:
+            print("Please input the week you want to print")
+            week = input()
+            myTable.print_class_table(int(week))
+        else:
+            break
         print(table)

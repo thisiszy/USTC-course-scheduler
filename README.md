@@ -1,6 +1,13 @@
 # USTC-course-scheduler
 
 ## Usage Example
+
+### Method 1 (prefer)
+```bash
+python3 class_table.py
+```
+
+### Method 2
 ```python
 >>> from class_table import classTable
 >>> mytable = classTable(student_id, password)
