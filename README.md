@@ -1,5 +1,16 @@
 # USTC-course-scheduler
 
+## Prerequisite
+```bash
+sudo apt-get update
+sudo apt-get install libleptonica-dev 
+sudo apt-get install tesseract-ocr
+sudo apt-get install libtesseract-dev
+
+cd USTC-course-scheduler
+pip install -r requirements.txt
+```
+
 ## Usage Example
 
 ### Method 1 (prefer)
