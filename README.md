@@ -20,6 +20,13 @@ https://stackoverflow.com/questions/50951955/pytesseract-tesseractnotfound-error
 cd USTC-course-scheduler
 pip install -r requirements.txt
 ```
+### MacOS
+```bash
+brew install tesseract
+
+cd USTC-course-scheduler
+pip install -r requirements.txt
+```
 
 ## Usage Example
 ### Method 1 (Recommend)
