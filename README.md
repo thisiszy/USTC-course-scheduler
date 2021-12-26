@@ -1,6 +1,7 @@
 # USTC-course-scheduler
 
 ## Prerequisite
+### Linux
 ```bash
 sudo apt-get update
 sudo apt-get install libleptonica-dev 
@@ -10,10 +11,18 @@ sudo apt-get install libtesseract-dev
 cd USTC-course-scheduler
 pip install -r requirements.txt
 ```
+### Windows
+#### Step 1
+install tesseract see:
+https://stackoverflow.com/questions/50951955/pytesseract-tesseractnotfound-error-tesseract-is-not-installed-or-its-not-i
+#### Step 2
+```bash
+cd USTC-course-scheduler
+pip install -r requirements.txt
+```
 
 ## Usage Example
-
-### Method 1 (prefer)
+### Method 1 (Recommend)
 ```bash
 python3 class_table.py
 ```

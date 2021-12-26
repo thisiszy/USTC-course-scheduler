@@ -1,5 +1,6 @@
 # project files
 course.db
+history.plk
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

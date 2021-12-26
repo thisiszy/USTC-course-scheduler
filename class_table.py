@@ -13,6 +13,8 @@ import z3
 from prettytable import PrettyTable
 import pickle
 
+from z3.z3 import Select
+
 
 '''
 >>> from class_table import classTable
@@ -47,6 +49,7 @@ class classTable:
     # class table for one semester
     __place_table = []
     __history_model = []
+    __cur_classes = []
     # the semester you need to schedule class table
     semester = ''
     # courses code list you want to schedule
@@ -80,10 +83,21 @@ class classTable:
     def save_history_model(self):
         with open('history.plk', 'wb') as f:
             pickle.dump(self.__history_model, f, pickle.HIGHEST_PROTOCOL)
+        Alarm.success("History model saved")
     
     def load_history_model(self):
         with open('history.plk', 'rb') as f:
             self.__history_model = pickle.load(f)
+        Alarm.success("History model loaded")
+    
+    def list_history_model(self):
+        for num in range(len(self.__history_model)):
+            print(str(num) + '\t' + str(self.__history_model[num]))
+        Alarm.info("History model list done")
+    
+    def set_cur_class(self, select):
+        self.__cur_classes = self.__history_model[select]
+        Alarm.success("Current class table set to " + str(self.__history_model[select]))
 
     def config(self):
         '''
@@ -94,11 +108,6 @@ class classTable:
         self.print_semester_id_map()
         print("Please input the semester you want to schedule class table:")
         self.semester = input()
-        print("Please input class codes, end with 0000")
-        code = input()
-        while code != '0000':
-            self.course_code_list.append(code)
-            code = input()
         Alarm.success("Config done!")
 
     def login(self) -> None:
@@ -276,6 +285,9 @@ class classTable:
         if self.__session is None:
             Alarm.fail("Please use login() first!")
             return
+        elif self.semester == '':
+            Alarm.fail("Please set semester first!")
+            return
         self._prepare_database()
         courses_info_list = self._get_courses_by_semester(semester_id)
         con = sqlite3.connect('course.db')
@@ -442,8 +454,9 @@ class classTable:
 
         return z3.And(place_constraint, lesson_constraint, history_constraint, prefer_constraint)
 
-    def _place_lessons(self, cur_classes: list):
+    def _place_lessons(self):
         Alarm.info("Try to place lessons...")
+        cur_classes = self.__cur_classes
         self.__place_table = [[[[] for _ in range(13)] for _ in range(7)] for _ in range(18)]
         con = sqlite3.connect('course.db')
         cur = con.cursor()
@@ -490,8 +503,9 @@ class classTable:
             if model[item] == z3.BoolVal(True):
                 cur_classes.append(str(item).split('_')[0])
         self.__history_model.append(cur_classes)
+        self.__cur_classes = cur_classes
         Alarm.success("Solution saved, solution is " + str(cur_classes))
-        self._place_lessons(cur_classes)
+        self._place_lessons()
 
     def print_class_table(self, week):
         '''
@@ -499,8 +513,8 @@ class classTable:
         >>> myTable.print_class_table(0)    # print class table at week 1
         '''
         if self.__place_table == []:
-            Alarm.warning("No place table, try to solve")
-            self.solve()
+            Alarm.warning("No place table, try to place")
+            self._place_lessons()
         if week < 0 or week > 17:
             Alarm.fail("Invalid week")
             return
@@ -530,6 +544,7 @@ class classTable:
             else:
                 lesson_list[item['termTextZhs'][0]].append((item['course']['nameZh'], item['course']['code']))
 
+        lesson_list = dict(sorted(lesson_list.items(), key=lambda item: item[0]))
         for k, v in lesson_list.items():
             print("--------------" + k + "--------------")
             for i in v:
@@ -576,46 +591,72 @@ if __name__ == "__main__":
     table.add_row(['1', 'login', 'login to your account'])
     table.add_row(['2', 'set semester', 'select your semester'])
     table.add_row(['3', 'set lessons', 'select your current semester lessons'])
-    table.add_row(['4', 'update database', 'update course database from jw.ustc.edu.cn'])
+    table.add_row(['4', 'update', 'update course database from jw.ustc.edu.cn'])
     table.add_row(['5', 'add prefer class', 'select the class that you prefer'])
     table.add_row(['6', 'solve', 'get your class table solution'])
-    table.add_row(['7', 'print class table', 'print your class table at a specific week'])
+    table.add_row(['7', 'print', 'print your class table at a specific week (from 0 to 17)'])
+    table.add_row(['8', 'select previous combination', 'select previous class combination'])
+    table.add_row(['9', 'save', 'save history model'])
+    table.add_row(['10', 'load', 'load history model'])
+    table.add_row(['11', 'clear', 'clear history model and prefer class list'])
     table.add_row(['other', 'exit', 'exit the program'])
     print(table)
     while True:
-        num = int(input())
-        # if num == 0:
-        #     print(table)
-        if num == 1:
-            print("Please input your username")
-            username = input()
-            print("Please input your password")
-            password = input()
-            myTable = classTable(username, password)
-            myTable.login()
-        elif num == 2:
-            myTable.print_semester_id_map()
-            print("Please input your semester id")
-            semester_id = input()
-            myTable.semester = semester_id.strip()
-        elif num == 3:
-            print("Here's your lessons, please input lessons you want to take, you only need to input lesson code(seperate each lesson by ',', e.g. \nCS1502.01, 011103.02, MARX1004.20 ")
-            myTable.get_study_plan()
-            lessons = input()
-            myTable.course_code_list = []
-            for item in lessons.split(','):
-                myTable.course_code_list.append(item.strip())
-        elif num == 4:
-            print("Updating database, if it's the first time, please wait for a while, 'course.db' will be created")
-            myTable.update_db(myTable.semester)
-        elif num == 5:
-            myTable._select_prefer_class()
-        elif num == 6:
-            myTable.solve()
-        elif num == 7:
-            print("Please input the week you want to print")
-            week = input()
-            myTable.print_class_table(int(week))
-        else:
-            break
-        print(table)
+        try:
+            num = int(input())
+            # if num == 0:
+            #     print(table)
+            if num == 1:
+                print("Please input your student id, e.g. PBxxxxxxxx")
+                username = input()
+                print("Please input your password")
+                password = input()
+                myTable = classTable(username, password)
+                myTable.login()
+            elif num == 2:
+                myTable.print_semester_id_map()
+                print("Please input your semester id")
+                semester_id = input()
+                myTable.semester = semester_id.strip()
+            elif num == 3:
+                myTable.get_study_plan()
+                print("Here's your lessons, please input lessons you want to take, you only need to input lesson code(seperate each lesson by ',', e.g. \n>>> CS1502.01, 011103.02, MARX1004.20 ")
+                lessons = input()
+                myTable.course_code_list = []
+                for item in lessons.split(','):
+                    myTable.course_code_list.append(item.strip())
+            elif num == 4:
+                print("Updating database, if it's the first time, please wait for a while, 'course.db' will be created")
+                myTable.update_db(myTable.semester)
+            elif num == 5:
+                myTable._select_prefer_class()
+            elif num == 6:
+                myTable.solve()
+            elif num == 7:
+                print("Please input the week you want to print")
+                week = input()
+                myTable.print_class_table(int(week))
+            elif num == 8:
+                print("Select previous schedule")
+                myTable.list_history_model()
+                print("Please the combination (input a number)")
+                select = int(input())
+                myTable.set_cur_class(select)
+                if myTable.semester == '':
+                    Alarm.fail("Please set semester first")
+                    continue
+                myTable._place_lessons()
+            elif num == 9:
+                myTable.save_history_model()
+            elif num == 10:
+                myTable.load_history_model()
+            elif num == 11:
+                myTable.clear()
+            else:
+                break
+        except Exception as e:
+            print(e)
+            pass
+        finally:
+            print(table)
+    print("Bye!")
