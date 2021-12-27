@@ -282,10 +282,7 @@ class classTable:
         add all course info in the new semester to the database
         '''
         self._check_login()
-        if self.__session is None:
-            Alarm.fail("Please use login() first!")
-            return
-        elif self.semester == '':
+        if self.semester == '':
             Alarm.fail("Please set semester first!")
             return
         self._prepare_database()
@@ -524,9 +521,6 @@ class classTable:
 
     def get_study_plan(self):
         self._check_login()
-        if self.__session is None:
-            Alarm.fail("Please use login() first!")
-            return
         Alarm.info("Trying to get your plan...")
         r = self.__session.get("https://jw.ustc.edu.cn/for-std/program")
         soup = BeautifulSoup(r.text, "html.parser")
@@ -559,12 +553,14 @@ class classTable:
                 if len(result) == 0:
                     Alarm.fail("No such course: %s" % (courseCode))
                     return
-                print("select your prefer class (seperate each class by ',' and skip select by press ENTER")
+                print("select your prefer class (seperate each class code by ',' and skip select by press ENTER")
                 print("--------------" + result[0][3] + "--------------")
                 classes = []
+                table = PrettyTable(["Teacher", "Week", "Time", "Class Code"])
                 for item in result:
                     classes.append(item[4])
-                    print("%s\t%s\t%s\t%s\t" % (item[0], item[1], item[2], item[4]))
+                    table.add_row([item[0], item[1], item[2], item[4]])
+                print(table)
                 selects = input().split(',')
                 if selects != ['']:
                     select_list = []
@@ -632,6 +628,10 @@ if __name__ == "__main__":
                 myTable._select_prefer_class()
             elif num == 6:
                 myTable.solve()
+                print("Here's your lessons at week 0")
+                myTable.print_class_table(0)
+                print("PRESS ENTER TO CONTINUE")
+                input()
             elif num == 7:
                 print("Please input the week you want to print")
                 week = input()
