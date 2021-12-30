@@ -13,9 +13,6 @@ import z3
 from prettytable import PrettyTable
 import pickle
 
-from z3.z3 import Select
-
-
 '''
 >>> from class_table import classTable
 >>> mytable = classTable("PB12345678", "qwert123")
@@ -553,7 +550,7 @@ class classTable:
                 if len(result) == 0:
                     Alarm.fail("No such course: %s" % (courseCode))
                     return
-                print("select your prefer class (seperate each class code by ',' and skip select by press ENTER")
+                print("select your prefer class (seperate each class code by ',' and skip select by press ENTER\n e.g. >>> CS1502.01,CS1502.02,CS1502.03")
                 print("--------------" + result[0][3] + "--------------")
                 classes = []
                 table = PrettyTable(["Teacher", "Week", "Time", "Class Code"])
@@ -566,9 +563,10 @@ class classTable:
                     select_list = []
                     try:
                         for item in selects:
-                            print(item.strip())
-                            select_list.append(item.strip())
-                            classes.remove(item.strip())
+                            if item != '':
+                                print(item.strip())
+                                select_list.append(item.strip())
+                                classes.remove(item.strip())
                         self.__prefer_class_list.append((select_list, classes))
                     except Exception as e:
                         Alarm.fail("Invalid input")
@@ -611,16 +609,17 @@ if __name__ == "__main__":
                 myTable.login()
             elif num == 2:
                 myTable.print_semester_id_map()
-                print("Please input your semester id")
+                print("Please input your semester id\n e.g. >>> 141")
                 semester_id = input()
                 myTable.semester = semester_id.strip()
             elif num == 3:
                 myTable.get_study_plan()
-                print("Here's your lessons, please input lessons you want to take, you only need to input lesson code(seperate each lesson by ',', e.g. \n>>> CS1502.01, 011103.02, MARX1004.20 ")
+                print("Here's your lessons, please input lessons you want to take, you only need to input lesson code(seperate each lesson by ',')\ne.g. >>> CS1502, 011103, MARX1004 ")
                 lessons = input()
                 myTable.course_code_list = []
                 for item in lessons.split(','):
-                    myTable.course_code_list.append(item.strip())
+                    if item != '':
+                        myTable.course_code_list.append(item.strip())
             elif num == 4:
                 print("Updating database, if it's the first time, please wait for a while, 'course.db' will be created")
                 myTable.update_db(myTable.semester)
@@ -633,9 +632,11 @@ if __name__ == "__main__":
                 print("PRESS ENTER TO CONTINUE")
                 input()
             elif num == 7:
-                print("Please input the week you want to print")
+                print("Please input the week you want to print\n e.g. >>> 0")
                 week = input()
                 myTable.print_class_table(int(week))
+                print("PRESS ENTER TO CONTINUE")
+                input()
             elif num == 8:
                 print("Select previous schedule")
                 myTable.list_history_model()
